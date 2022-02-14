@@ -2,6 +2,10 @@
 //We using the Serve mode you can read all workitems
 package api
 
+/* TODO:
+Do lookup of workItemType
+*/
+
 import (
 	"bytes"
 	"encoding/json"
@@ -81,52 +85,61 @@ type StatusLookupInterface map[int]StatusInterface
 
 //The WorkItem interface
 type WorkItemInterface struct {
-	AvgFte                    float64                `json:"avg_fte"`
-	ChildCount                int                    `json:"child_count"`
-	ChildOpenCount            int                    `json:"child_open_count"`
-	Code                      int                    `json:"code"`
-	Draft                     bool                   `json:"draft"`
-	DtEnd                     string                 `json:"dt_end"`
-	DtReport                  string                 `json:"dt_report"`
-	DtStart                   string                 `json:"dt_start"`
-	ExternalSystemConnectorID interface{}            `json:"external_system_connector_id"`
-	ExternalSystemItemID      interface{}            `json:"external_system_item_id"`
-	ExternalSystemItemTypeID  interface{}            `json:"external_system_item_type_id"`
-	Fields                    map[string]interface{} `json:"fields"`
-	ID                        int                    `json:"id"`
-	LatestRevisionID          int                    `json:"latest_revision_id"`
-	Level                     int                    `json:"level"`
-	Links                     []interface{}          `json:"links"`
-	Name                      string                 `json:"name"`
-	ParentWorkItemID          interface{}            `json:"parent_work_item_id"`
-	Path                      interface{}            `json:"path"`
-	PercentComplete           interface{}            `json:"percent_complete"`
-	Phases                    []interface{}          `json:"phases"`
-	ResourceIds               []interface{}          `json:"resource_ids"`
-	ResourceLocationIds       []interface{}          `json:"resource_location_ids"`
-	ResourceRoleIds           []interface{}          `json:"resource_role_ids"`
-	ResourceTeamIds           []interface{}          `json:"resource_team_ids"`
-	StatusID                  int                    `json:"status_id"`
-	Status                    StatusInterface
-	StatusReports             []StatusReportInterface
-	Tags                      []interface{} `json:"tags"`
-	TotalEffort               float64       `json:"total_effort"`
-	TrackedHours              int           `json:"tracked_hours"`
-	WorkItemTypeID            int           `json:"work_item_type_id"`
-	WorkItemType              string
-	WorkspaceID               int         `json:"workspace_id"`
-	WorkzoneID                interface{} `json:"workzone_id"`
+	AvgFte float64 `json:"avg_fte"`
+	//	ChildCount                int                    `json:"child_count"`
+	//	ChildOpenCount            int                    `json:"child_open_count"`
+	Code    int    `json:"code"`
+	Draft   bool   `json:"draft"`
+	DtEnd   string `json:"dt_end"`
+	DtStart string `json:"dt_start"`
+	//	ExternalSystemConnectorID interface{}            `json:"external_system_connector_id"`
+	//	ExternalSystemItemID      interface{}            `json:"external_system_item_id"`
+	//	ExternalSystemItemTypeID  interface{}            `json:"external_system_item_type_id"`
+	Fields           map[string]interface{} `json:"fields"`
+	ID               int                    `json:"id"`
+	LatestRevisionID int                    `json:"latest_revision_id"`
+	//	Level                     int                    `json:"level"`
+	//	Links                     []interface{}          `json:"links"`
+	Name             string      `json:"name"`
+	ParentWorkItemID interface{} `json:"parent_work_item_id"`
+	//	Path                interface{}   `json:"path"`
+	PercentComplete     interface{}   `json:"percent_complete"`
+	Phases              []interface{} `json:"phases"`
+	ResourceIds         []interface{} `json:"resource_ids"`
+	ResourceLocationIds []interface{} `json:"resource_location_ids"`
+	ResourceRoleIds     []interface{} `json:"resource_role_ids"`
+	ResourceTeamIds     []interface{} `json:"resource_team_ids"`
+	DtReport            string        `json:"dt_report"`
+	StatusID            int           `json:"status_id"`
+	Status              interface{}
+	StatusReport        string
+	StatusReports       []StatusReportInterface
+	Tags                []interface{} `json:"tags"`
+	TotalEffort         float64       `json:"total_effort"`
+	TrackedHours        int           `json:"tracked_hours"`
+	WorkItemTypeID      int           `json:"work_item_type_id"`
+	//	WorkItemType              string
+	//	WorkspaceID               int         `json:"workspace_id"`
+	//	WorkzoneID                interface{} `json:"workzone_id"`
 }
 
 //The ViewInterface
 type ViewInterface struct {
-	Color           string `json:"color"`
-	ID              int    `json:"id"`
-	IsPrivate       bool   `json:"is_private"`
-	Name            string `json:"name"`
-	OnlyNativeItems bool   `json:"only_native_items"`
-	WorkspaceID     int    `json:"workspace_id"`
+	ID           int    `json:"id"`
+	IsPrivate    bool   `json:"is_private"`
+	Name         string `json:"name"`
+	ViewSettings struct {
+		TableSettings struct {
+			ColumnSettings []struct {
+				FieldName string `json:"field_name"`
+				IsVisible bool   `json:"is_visible"`
+				Width     int    `json:"width"`
+			} `json:"column_settings"`
+		} `json:"table_settings"`
+	} `json:"view_settings,omitempty"`
 }
+
+type ViewLookupInterface map[string]ViewInterface
 
 type FieldValueInterface struct {
 	FieldID    int    `json:"field_id"`
@@ -203,6 +216,9 @@ var token = ""
 
 //Should we do Fields lookup
 var DoFieldsLookup bool = true
+
+//Should we only Name for lookup values
+var OnlyLookupName bool = true
 
 //Should we use drafts
 var UseDrafts bool = true
@@ -435,25 +451,23 @@ func GetResourcesLookUp(token string, organization int, workspace int) (Resource
 	return lookup, nil
 }
 
-//Get the view for the given organization
-func GetView(token string, organization int, workspace int, name string) (int, error) {
-	if name == "" {
-		return 0, nil
-	}
+//Get the view lookup for the given organization
+func GetViewLookup(token string, organization int, workspace int) (ViewLookupInterface, error) {
+	var lookup ViewLookupInterface = make(ViewLookupInterface)
 	request, err := http.NewRequest("GET", BaseUrl+"/views?workspace_id="+strconv.Itoa(workspace), nil)
 	request.Header.Add("Authorization", "Bearer "+token)
 	if err != nil {
-		return 0, err
+		return lookup, err
 	}
 	client := &http.Client{}
 	response, err := client.Do(request)
 	if err != nil {
-		return 0, err
+		return lookup, err
 	}
 	defer response.Body.Close()
 	responseData, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return 0, err
+		return lookup, err
 	}
 	type ViewResponse struct {
 		Data []ViewInterface `json:"data"`
@@ -461,16 +475,15 @@ func GetView(token string, organization int, workspace int, name string) (int, e
 	var responseObject ViewResponse
 	err = json.Unmarshal(responseData, &responseObject)
 	if err != nil {
-		return 0, err
+		return lookup, err
 	}
 	for _, s := range responseObject.Data {
-		if s.Name == name && s.WorkspaceID == workspace {
-			return s.ID, nil
-		}
+		lookup[s.Name] = s
 	}
-	return 0, errors.New("View (" + name + ") not found")
+	return lookup, nil
 }
 
+//Get the status reports
 func GetStatusReports(token string, workitem int, count int) ([]StatusReportInterface, error) {
 	var ret []StatusReportInterface
 
@@ -509,17 +522,23 @@ func GetStatusReports(token string, workitem int, count int) ([]StatusReportInte
 }
 
 //Get all the workitems for a given view within a workspace
-func GetWorkItems(token string, organization int, workspace int, view int, statusCount int, drafts bool) (string, error) {
+func GetWorkItems(token string, organization int, workspace int, viewName string, statusCount int, drafts bool) (string, error) {
 	var addDrafts = ""
 	if drafts {
 		addDrafts = "drafts=true"
 	}
 	var request *http.Request = nil
 	var err error = nil
-	if view == 0 {
+
+	lookupView, err := GetViewLookup(token, organization, workspace)
+	if err != nil {
+		return "", err
+	}
+	var view = lookupView[viewName]
+	if view.ID == 0 {
 		request, err = http.NewRequest("GET", BaseUrl+"/work_items?workspace_id="+strconv.Itoa(workspace)+"&"+addDrafts, nil)
 	} else {
-		request, err = http.NewRequest("GET", BaseUrl+"/views/"+strconv.Itoa(view)+"/work_items?"+addDrafts, nil)
+		request, err = http.NewRequest("GET", BaseUrl+"/views/"+strconv.Itoa(view.ID)+"/work_items?"+addDrafts, nil)
 	}
 	request.Header.Add("Authorization", "Bearer "+token)
 	if err != nil {
@@ -567,40 +586,77 @@ func GetWorkItems(token string, organization int, workspace int, view int, statu
 		//If we need to add the status reports then add them
 		if statusCount >= 0 {
 			//Get the statusReports for the object
-			responseObject.Data[i].StatusReports, err = GetStatusReports(token, o.ID, statusCount)
+			var statusReports, err = GetStatusReports(token, o.ID, statusCount)
 			if err != nil {
 				return "", err
 			}
+			if !OnlyLookupName || statusCount != 1 {
+				responseObject.Data[i].StatusReports = statusReports
+			}
+			if len(statusReports) > 0 {
+				responseObject.Data[i].StatusReport = statusReports[0].Report
+			}
 		}
 		//Fill the status field with the result of the status_id
-		responseObject.Data[i].Status = lookupStatus[responseObject.Data[i].StatusID]
+		if OnlyLookupName {
+			responseObject.Data[i].Status = lookupStatus[responseObject.Data[i].StatusID].Name
+		} else {
+			responseObject.Data[i].Status = lookupStatus[responseObject.Data[i].StatusID]
+		}
+
+		//Removed fields if they are not visible
+		if view.ID != 0 {
+			for _, v := range view.ViewSettings.TableSettings.ColumnSettings {
+				for nf := range o.Fields {
+					if nf == v.FieldName && !v.IsVisible {
+						delete(responseObject.Data[i].Fields, nf)
+						break
+					}
+				}
+			}
+		}
 
 		//Replace all fields lookup values
 		if DoFieldsLookup {
 			for n, v := range o.Fields {
+				if v == nil {
+					continue
+				}
 				lookup := lookupFields[n]
-				//fmt.Println("Lookup Field n", n, "v", v, "c", lookup.DataTypeCode)
 				if lookup.DataTypeCode == "enum" {
 					//For Enum do lookup of Value in the selected values
 					for _, lv := range lookup.SelectValues {
-						if lv.ID == v {
-							responseObject.Data[i].Fields[n] = lv.Name
+						if lv.ID == int(v.(float64)) {
+							if OnlyLookupName {
+								responseObject.Data[i].Fields[n] = lv.Name
+							} else {
+								responseObject.Data[i].Fields[n] = lv
+							}
 						}
 					}
 				} else
 
 				//resource
-				if lookup.DataTypeCode == "resource" && v != nil {
-					responseObject.Data[i].Fields[n] = lookupResources[int(v.(float64))]
+				if lookup.DataTypeCode == "resource" {
+					var resource ResourcesInterface = lookupResources[int(v.(float64))]
+					if OnlyLookupName {
+						responseObject.Data[i].Fields[n] = resource.Name
+					} else {
+						responseObject.Data[i].Fields[n] = resource
+					}
 				}
 
 				//tags
-				if lookup.DataTypeCode == "tag" && v != nil && len(v.([]interface{})) != 0 {
-					var tags []FieldValueInterface
+				if lookup.DataTypeCode == "tag" && len(v.([]interface{})) != 0 {
+					var tags []interface{}
 					for _, tv := range v.([]interface{}) {
 						for _, fv := range lookup.SelectValues {
 							if fv.ID == int(tv.(float64)) {
-								tags = append(tags, fv)
+								if OnlyLookupName {
+									tags = append(tags, fv.Name)
+								} else {
+									tags = append(tags, fv)
+								}
 								break
 							}
 						}
@@ -640,11 +696,7 @@ func GetAction(response *string, token string, action string, organization strin
 	if strings.Contains(action, "VIEW") {
 		var r actionReponseInterface
 		r.action = "VIEW"
-		viewId, err := GetView(token, orgId, spaceId, viewName)
-		if err != nil {
-			return err
-		}
-		r.response, err = GetWorkItems(token, orgId, spaceId, viewId, statusCount, UseDrafts)
+		r.response, err = GetWorkItems(token, orgId, spaceId, viewName, statusCount, UseDrafts)
 		if err != nil || token == "" {
 			return err
 		}

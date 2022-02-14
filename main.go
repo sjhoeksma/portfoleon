@@ -50,6 +50,8 @@ func Init() {
 	flag.StringVar(&api.Action, "a", api.Action, "The action(s) that should be performed.")
 	flag.BoolVar(&api.DoFieldsLookup, "l", api.DoFieldsLookup, "Should we do field lookups.")
 	flag.BoolVar(&api.UseDrafts, "d", api.UseDrafts, "Should we use drafts.")
+	flag.BoolVar(&api.DoFieldsLookup, "FieldsLookup", api.DoFieldsLookup, "Should we use do fields lookup.")
+	flag.BoolVar(&api.OnlyLookupName, "OnlyLookupFields", api.OnlyLookupName, "Should we only use the value iof the lookup fields.")
 
 	flag.Parse() // after declaring flags we need to call it
 }
