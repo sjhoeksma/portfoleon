@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"portfoleon/api"
 	"strconv"
@@ -11,6 +12,9 @@ import (
 
 var fileName = ""
 var webServer bool = false
+
+//The bind Address
+var BindAddress = ":8080"
 
 //Read os flags: -u <baseUrl> , -k <apiKey>, -ip <bindAddress> ....
 //Or use Environment flags PORTFOLEON_APIKEY, PORTFOLEON_BASEURL, PORTFOLEON_BINDADDRESS
@@ -26,7 +30,7 @@ func Init() {
 	}
 	s = os.Getenv("PORTFOLEON_BINDADDRESS")
 	if s != "" {
-		api.BindAddress = s
+		BindAddress = s
 	}
 	api.Organization = os.Getenv("PORTFOLEON_ORGANIZATION")
 	api.Workspace = os.Getenv("PORTFOLEON_WORKSPACE")
@@ -39,7 +43,7 @@ func Init() {
 	// flags declaration using flag package
 	flag.StringVar(&api.BaseUrl, "u", api.BaseUrl, "Specify baseuUrl towards protfoleon")
 	flag.StringVar(&api.ApiKey, "k", api.ApiKey, "Specify apiKey.")
-	flag.StringVar(&api.BindAddress, "b", api.BindAddress, "Specify bindAdress.")
+	flag.StringVar(&BindAddress, "b", BindAddress, "Specify bindAdress.")
 	flag.StringVar(&fileName, "f", fileName, "Write output to file.")
 	flag.BoolVar(&webServer, "serve", webServer, "Use if we should run a webserver.")
 
@@ -59,7 +63,10 @@ func main() {
 	Init()
 	if webServer {
 		//WebServer mode
-		api.Serve()
+		//Simple webserver to reponse on request with the requested workspace items
+		http.HandleFunc("/", api.WebHandler)
+		log.Println("Starting API servering on", BindAddress)
+		log.Fatal(http.ListenAndServe(BindAddress, nil))
 	} else {
 		//Output to console or file
 		token, err := api.GetToken(api.ApiKey)

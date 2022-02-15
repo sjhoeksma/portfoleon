@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -190,9 +189,6 @@ type WorkItemTypeInterface struct {
 }
 
 type WorkItemTypeLookupInterface map[int]WorkItemTypeInterface
-
-//The bind Address
-var BindAddress = ":8080"
 
 //Variable storing the baseURL to access portfoleon api
 var BaseUrl = "https://portfoleon.herokuapp.com/api/v1"
@@ -798,7 +794,7 @@ func GetAction(response *string, token string, action string, organization strin
 }
 
 //The handler for web requests
-func apiHandler(w http.ResponseWriter, r *http.Request) {
+func WebHandler(w http.ResponseWriter, r *http.Request) {
 	var _apiKey = ""
 	var _token = token
 	var err error
@@ -876,11 +872,4 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, response)
 	}
-}
-
-//Simple webserver to reponse on request with the requested workspace items
-func Serve() {
-	http.HandleFunc("/", apiHandler)
-	log.Println("Starting API servering on", BindAddress)
-	log.Fatal(http.ListenAndServe(BindAddress, nil))
 }
