@@ -12,7 +12,7 @@ import (
 var fileName = ""
 var webServer bool = false
 
-//Read os flags: -u <baseUrl> , -k <apiKey>, -ip <bindAddress>
+//Read os flags: -u <baseUrl> , -k <apiKey>, -ip <bindAddress> ....
 //Or use Environment flags PORTFOLEON_APIKEY, PORTFOLEON_BASEURL, PORTFOLEON_BINDADDRESS
 func Init() {
 	// Read OS variables
@@ -50,8 +50,7 @@ func Init() {
 	flag.StringVar(&api.Action, "a", api.Action, "The action(s) that should be performed.")
 	flag.BoolVar(&api.DoFieldsLookup, "l", api.DoFieldsLookup, "Should we do field lookups.")
 	flag.BoolVar(&api.UseDrafts, "d", api.UseDrafts, "Should we use drafts.")
-	flag.BoolVar(&api.DoFieldsLookup, "FieldsLookup", api.DoFieldsLookup, "Should we use do fields lookup.")
-	flag.BoolVar(&api.OnlyLookupName, "OnlyLookupFields", api.OnlyLookupName, "Should we only use the value iof the lookup fields.")
+	flag.BoolVar(&api.OnlyLookupName, "compact", api.OnlyLookupName, "Should we only use the values of the lookup fields only.")
 
 	flag.Parse() // after declaring flags we need to call it
 }
@@ -68,7 +67,8 @@ func main() {
 			log.Fatal("Login failed", err)
 		}
 		var response string = ""
-		err = api.GetAction(&response, token, api.Action, api.Organization, api.Workspace, api.ViewName, api.StatusCount)
+		err = api.GetAction(&response, token, api.Action, api.Organization, api.Workspace, api.ViewName,
+			api.StatusCount, api.DoFieldsLookup, api.OnlyLookupName)
 		if err != nil {
 			log.Fatal(err)
 		}

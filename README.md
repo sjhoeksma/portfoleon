@@ -19,6 +19,8 @@ portfoleon
     	Specify bindAdress. (default ":8080")
   -c int
     	The number of status reports to include in dump. (default -1 )
+  -compact
+    	Should we only use the values of the lookup fields only. (default true)
   -d	Should we use drafts. (default true)
   -f string
     	Write output to file.
@@ -53,3 +55,5 @@ When running a webserver using the -serve option, you should set your APIKEY in 
 * workspace=The workspace name
 * name=The view name or empty for all data
 * count=The number of status reports to include
+* compact=Return lookup values only
+* lookup=Lookup the all fields

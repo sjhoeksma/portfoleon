@@ -2,10 +2,6 @@
 //We using the Serve mode you can read all workitems
 package api
 
-/* TODO:
-Do lookup of workItemType
-*/
-
 import (
 	"bytes"
 	"encoding/json"
@@ -95,9 +91,9 @@ type WorkItemInterface struct {
 	//	ExternalSystemConnectorID interface{}            `json:"external_system_connector_id"`
 	//	ExternalSystemItemID      interface{}            `json:"external_system_item_id"`
 	//	ExternalSystemItemTypeID  interface{}            `json:"external_system_item_type_id"`
-	Fields           map[string]interface{} `json:"fields"`
-	ID               int                    `json:"id"`
-	LatestRevisionID int                    `json:"latest_revision_id"`
+	Fields map[string]interface{} `json:"fields"`
+	ID     int                    `json:"id"`
+	//	LatestRevisionID int                    `json:"latest_revision_id"`
 	//	Level                     int                    `json:"level"`
 	//	Links                     []interface{}          `json:"links"`
 	Name             string      `json:"name"`
@@ -118,7 +114,7 @@ type WorkItemInterface struct {
 	TotalEffort         float64       `json:"total_effort"`
 	TrackedHours        int           `json:"tracked_hours"`
 	WorkItemTypeID      int           `json:"work_item_type_id"`
-	//	WorkItemType              string
+	WorkItemType        interface{}
 	//	WorkspaceID               int         `json:"workspace_id"`
 	//	WorkzoneID                interface{} `json:"workzone_id"`
 }
@@ -186,6 +182,14 @@ type ResourcesInterface struct {
 }
 
 type ResourcesLookupInterface map[int]ResourcesInterface
+
+type WorkItemTypeInterface struct {
+	Code string `json:"code"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+type WorkItemTypeLookupInterface map[int]WorkItemTypeInterface
 
 //The bind Address
 var BindAddress = ":8080"
@@ -386,6 +390,39 @@ func GetStatusLookUp(token string, organization int, workspace int) (StatusLooku
 }
 
 //Create a lookup table for status
+func GetWorkItemTypeLookUp(token string, organization int, workspace int) (WorkItemTypeLookupInterface, error) {
+	var lookup WorkItemTypeLookupInterface = make(WorkItemTypeLookupInterface)
+
+	request, err := http.NewRequest("GET", BaseUrl+"/work_item_types?workspace_id="+strconv.Itoa(workspace), nil)
+	request.Header.Add("Authorization", "Bearer "+token)
+	if err != nil {
+		return lookup, err
+	}
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return lookup, err
+	}
+	defer response.Body.Close()
+	responseData, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return lookup, err
+	}
+	type WorkItemTypeResponse struct {
+		Data []WorkItemTypeInterface `json:"data"`
+	}
+	var responseObject WorkItemTypeResponse
+	err = json.Unmarshal(responseData, &responseObject)
+	if err != nil {
+		return lookup, err
+	}
+	for _, s := range responseObject.Data {
+		lookup[s.ID] = s
+	}
+	return lookup, nil
+}
+
+//Create a lookup table for status
 func GetFieldsLookUp(token string, organization int, workspace int) (FieldsLookupInterface, error) {
 	var lookup FieldsLookupInterface = make(FieldsLookupInterface)
 
@@ -522,7 +559,7 @@ func GetStatusReports(token string, workitem int, count int) ([]StatusReportInte
 }
 
 //Get all the workitems for a given view within a workspace
-func GetWorkItems(token string, organization int, workspace int, viewName string, statusCount int, drafts bool) (string, error) {
+func GetWorkItems(token string, organization int, workspace int, viewName string, statusCount int, drafts bool, doFieldsLookup bool, onlyLookupName bool) (string, error) {
 	var addDrafts = ""
 	if drafts {
 		addDrafts = "drafts=true"
@@ -566,6 +603,13 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 	if err != nil {
 		return "", err
 	}
+
+	//Create the lookup WorkItemType table
+	lookupWorkItemType, err := GetWorkItemTypeLookUp(token, organization, workspace)
+	if err != nil {
+		return "", err
+	}
+
 	//Create the lookupStatus table
 	lookupStatus, err := GetStatusLookUp(token, organization, workspace)
 	if err != nil {
@@ -590,7 +634,7 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 			if err != nil {
 				return "", err
 			}
-			if !OnlyLookupName || statusCount != 1 {
+			if !onlyLookupName || statusCount != 1 {
 				responseObject.Data[i].StatusReports = statusReports
 			}
 			if len(statusReports) > 0 {
@@ -598,10 +642,12 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 			}
 		}
 		//Fill the status field with the result of the status_id
-		if OnlyLookupName {
+		if onlyLookupName {
 			responseObject.Data[i].Status = lookupStatus[responseObject.Data[i].StatusID].Name
+			responseObject.Data[i].WorkItemType = lookupWorkItemType[responseObject.Data[i].WorkItemTypeID].Name
 		} else {
 			responseObject.Data[i].Status = lookupStatus[responseObject.Data[i].StatusID]
+			responseObject.Data[i].WorkItemType = lookupWorkItemType[responseObject.Data[i].WorkItemTypeID]
 		}
 
 		//Removed fields if they are not visible
@@ -617,7 +663,7 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 		}
 
 		//Replace all fields lookup values
-		if DoFieldsLookup {
+		if doFieldsLookup {
 			for n, v := range o.Fields {
 				if v == nil {
 					continue
@@ -627,7 +673,7 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 					//For Enum do lookup of Value in the selected values
 					for _, lv := range lookup.SelectValues {
 						if lv.ID == int(v.(float64)) {
-							if OnlyLookupName {
+							if onlyLookupName {
 								responseObject.Data[i].Fields[n] = lv.Name
 							} else {
 								responseObject.Data[i].Fields[n] = lv
@@ -639,7 +685,7 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 				//resource
 				if lookup.DataTypeCode == "resource" {
 					var resource ResourcesInterface = lookupResources[int(v.(float64))]
-					if OnlyLookupName {
+					if onlyLookupName {
 						responseObject.Data[i].Fields[n] = resource.Name
 					} else {
 						responseObject.Data[i].Fields[n] = resource
@@ -652,7 +698,7 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 					for _, tv := range v.([]interface{}) {
 						for _, fv := range lookup.SelectValues {
 							if fv.ID == int(tv.(float64)) {
-								if OnlyLookupName {
+								if onlyLookupName {
 									tags = append(tags, fv.Name)
 								} else {
 									tags = append(tags, fv)
@@ -673,7 +719,8 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 	return string(ret), err
 }
 
-func GetAction(response *string, token string, action string, organization string, workspace string, viewName string, statusCount int) error {
+func GetAction(response *string, token string, action string, organization string, workspace string,
+	viewName string, statusCount int, doFieldsLookup bool, onlyLookupName bool) error {
 	action = strings.ToUpper(action)
 	type actionReponseInterface struct {
 		action   string
@@ -696,7 +743,8 @@ func GetAction(response *string, token string, action string, organization strin
 	if strings.Contains(action, "VIEW") {
 		var r actionReponseInterface
 		r.action = "VIEW"
-		r.response, err = GetWorkItems(token, orgId, spaceId, viewName, statusCount, UseDrafts)
+		r.response, err = GetWorkItems(token, orgId, spaceId, viewName, statusCount, UseDrafts,
+			doFieldsLookup, onlyLookupName)
 		if err != nil || token == "" {
 			return err
 		}
@@ -706,7 +754,27 @@ func GetAction(response *string, token string, action string, organization strin
 	if strings.Contains(action, "USERS") {
 		var r actionReponseInterface
 		r.action = "USERS"
-		//TODO add user response
+		lookup, _ := GetResourcesLookUp(token, orgId, spaceId)
+		ret, _ := json.Marshal(lookup)
+		r.response = string(ret)
+		responseRec = append(responseRec, r)
+	}
+
+	if strings.Contains(action, "STATUS") {
+		var r actionReponseInterface
+		r.action = "STATUS"
+		lookup, _ := GetStatusLookUp(token, orgId, spaceId)
+		ret, _ := json.Marshal(lookup)
+		r.response = string(ret)
+		responseRec = append(responseRec, r)
+	}
+
+	if strings.Contains(action, "FIELDS") {
+		var r actionReponseInterface
+		r.action = "FIELDS"
+		lookup, _ := GetFieldsLookUp(token, orgId, spaceId)
+		ret, _ := json.Marshal(lookup)
+		r.response = string(ret)
 		responseRec = append(responseRec, r)
 	}
 
@@ -787,8 +855,19 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 	if s != "" {
 		statusCount, _ = strconv.Atoi(s)
 	}
+	var doFieldsLookup = DoFieldsLookup
+	s = r.URL.Query().Get("lookup")
+	if s != "" {
+		doFieldsLookup, _ = strconv.ParseBool(s)
+	}
+	var onlyLookupName = OnlyLookupName
+	s = r.URL.Query().Get("compact")
+	if s != "" {
+		onlyLookupName, _ = strconv.ParseBool(s)
+	}
 	var response = ""
-	err = GetAction(&response, token, action, organization, workspace, viewName, statusCount)
+	err = GetAction(&response, token, action, organization, workspace,
+		viewName, statusCount, doFieldsLookup, onlyLookupName)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, `{"error", "%s"}`, err)
