@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -98,22 +97,22 @@ type WorkItemInterface struct {
 	Name             string      `json:"name"`
 	ParentWorkItemID interface{} `json:"parent_work_item_id"`
 	//	Path                interface{}   `json:"path"`
-	PercentComplete     interface{}   `json:"percent_complete"`
-	Phases              []interface{} `json:"phases"`
-	ResourceIds         []interface{} `json:"resource_ids"`
-	ResourceLocationIds []interface{} `json:"resource_location_ids"`
-	ResourceRoleIds     []interface{} `json:"resource_role_ids"`
-	ResourceTeamIds     []interface{} `json:"resource_team_ids"`
-	DtReport            string        `json:"dt_report"`
-	StatusID            int           `json:"status_id"`
-	Status              interface{}
-	StatusReport        string
-	StatusReports       []StatusReportInterface
-	Tags                []interface{} `json:"tags"`
-	TotalEffort         float64       `json:"total_effort"`
-	TrackedHours        int           `json:"tracked_hours"`
-	WorkItemTypeID      int           `json:"work_item_type_id"`
-	WorkItemType        interface{}
+	PercentComplete     interface{}             `json:"percent_complete"`
+	Phases              []interface{}           `json:"phases"`
+	ResourceIds         []interface{}           `json:"resource_ids"`
+	ResourceLocationIds []interface{}           `json:"resource_location_ids"`
+	ResourceRoleIds     []interface{}           `json:"resource_role_ids"`
+	ResourceTeamIds     []interface{}           `json:"resource_team_ids"`
+	DtReport            string                  `json:"dt_report"`
+	StatusID            int                     `json:"status_id"`
+	Status              interface{}             `json:"status"`
+	StatusReport        string                  `json:"status_report"`
+	StatusReports       []StatusReportInterface `json:"status_reports"`
+	Tags                []interface{}           `json:"tags"`
+	TotalEffort         float64                 `json:"total_effort"`
+	TrackedHours        int                     `json:"tracked_hours"`
+	WorkItemTypeID      int                     `json:"work_item_type_id"`
+	WorkItemType        interface{}             `json:"work_item_type"`
 	//	WorkspaceID               int         `json:"workspace_id"`
 	//	WorkzoneID                interface{} `json:"workzone_id"`
 }
@@ -192,36 +191,6 @@ type WorkItemTypeLookupInterface map[int]WorkItemTypeInterface
 
 //Variable storing the baseURL to access portfoleon api
 var BaseUrl = "https://portfoleon.herokuapp.com/api/v1"
-
-//Variavble stroing the ApiKey to login to portfoleon
-var ApiKey = ""
-
-//The default organization
-var Organization = ""
-
-//The default workspace
-var Workspace = ""
-
-//The default view
-var ViewName = ""
-
-//The default number of Status counts to include
-var StatusCount = -1
-
-//The actions witch should be performed
-var Action = "View"
-
-//Veriable storing the active global token
-var token = ""
-
-//Should we do Fields lookup
-var DoFieldsLookup bool = true
-
-//Should we only Name for lookup values
-var OnlyLookupName bool = true
-
-//Should we use drafts
-var UseDrafts bool = true
 
 //Create a bearer token by logging in useing the apiKey
 func GetToken(apiKey string) (string, error) {
@@ -555,7 +524,7 @@ func GetStatusReports(token string, workitem int, count int) ([]StatusReportInte
 }
 
 //Get all the workitems for a given view within a workspace
-func GetWorkItems(token string, organization int, workspace int, viewName string, statusCount int, drafts bool, doFieldsLookup bool, onlyLookupName bool) (string, error) {
+func GetWorkItems(token string, organization int, workspace int, viewName string, statusCount int, doFieldsLookup bool, onlyLookupName bool, drafts bool) (string, error) {
 	var addDrafts = ""
 	if drafts {
 		addDrafts = "drafts=true"
@@ -716,7 +685,7 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 }
 
 func GetAction(response *string, token string, action string, organization string, workspace string,
-	viewName string, statusCount int, doFieldsLookup bool, onlyLookupName bool) error {
+	viewName string, statusCount int, doFieldsLookup bool, onlyLookupName bool, useDrafts bool) error {
 	action = strings.ToUpper(action)
 	type actionReponseInterface struct {
 		action   string
@@ -739,7 +708,7 @@ func GetAction(response *string, token string, action string, organization strin
 	if strings.Contains(action, "VIEW") {
 		var r actionReponseInterface
 		r.action = "VIEW"
-		r.response, err = GetWorkItems(token, orgId, spaceId, viewName, statusCount, UseDrafts,
+		r.response, err = GetWorkItems(token, orgId, spaceId, viewName, statusCount, useDrafts,
 			doFieldsLookup, onlyLookupName)
 		if err != nil || token == "" {
 			return err
@@ -791,85 +760,4 @@ func GetAction(response *string, token string, action string, organization strin
 		*response += "}"
 	}
 	return nil
-}
-
-//The handler for web requests
-func WebHandler(w http.ResponseWriter, r *http.Request) {
-	var _apiKey = ""
-	var _token = token
-	var err error
-	//Get a valid token for portfoleon on every request
-	reqToken := r.Header.Get("Authorization")
-	if reqToken != "" {
-		splitToken := strings.Split(reqToken, "Bearer ")
-		_apiKey = splitToken[1]
-		_token = ""
-	}
-	if _apiKey == "" {
-		_apiKey = ApiKey
-	}
-	//Run refresh of token
-	if _token != "" && RefreshToken(&_token) != nil {
-		_token = ""
-	}
-	//If we don't have a token the create a new one
-	if _token == "" {
-		//Create an new token
-		_token, err = GetToken(_apiKey)
-		if err != nil {
-			w.WriteHeader(http.StatusForbidden)
-			fmt.Fprintf(w, `{"error", "%s"}`, err)
-			return
-		}
-		//Store token global if
-		if reqToken == "" {
-			token = _token
-		}
-	}
-	action := r.URL.Query().Get("action")
-	if action == "" {
-		if r.URL.Path[1:] != "" {
-			action = strings.ReplaceAll(r.URL.Path[1:], "/", ",")
-		} else {
-			action = Action
-		}
-	}
-	organization := r.URL.Query().Get("organization")
-	if organization == "" {
-		organization = Organization
-	}
-	workspace := r.URL.Query().Get("workspace")
-	if workspace == "" {
-		workspace = Workspace
-	}
-	viewName := r.URL.Query().Get("name")
-	if viewName == "" {
-		viewName = ViewName
-	}
-	var statusCount = StatusCount
-	s := r.URL.Query().Get("count")
-	if s != "" {
-		statusCount, _ = strconv.Atoi(s)
-	}
-	var doFieldsLookup = DoFieldsLookup
-	s = r.URL.Query().Get("lookup")
-	if s != "" {
-		doFieldsLookup, _ = strconv.ParseBool(s)
-	}
-	var onlyLookupName = OnlyLookupName
-	s = r.URL.Query().Get("compact")
-	if s != "" {
-		onlyLookupName, _ = strconv.ParseBool(s)
-	}
-	var response = ""
-	err = GetAction(&response, token, action, organization, workspace,
-		viewName, statusCount, doFieldsLookup, onlyLookupName)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, `{"error", "%s"}`, err)
-	} else {
-		//Write out the  data
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, response)
-	}
 }

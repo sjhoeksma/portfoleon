@@ -18,3 +18,4 @@
 #Exclude Visual studio stuff
 .vscode
 data.json
+data.html

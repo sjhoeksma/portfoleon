@@ -1,20 +1,65 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"portfoleon/api"
 	"strconv"
+	"strings"
 )
 
+//The filename use as output
 var fileName = ""
+
+//The filename use as template for output
+var templateName = ""
+
+//The JsonFile use to test the template
+var jsonFile = ""
+
+//Should we run as webeserver
 var webServer bool = false
 
 //The bind Address
-var BindAddress = ":8080"
+var bindAddress = ":8080"
+
+//Variavble stroing the ApiKey to login to portfoleon
+var apiKey = ""
+
+//The default organization
+var organization = ""
+
+//The default workspace
+var workspace = ""
+
+//The default view
+var viewName = ""
+
+//The default number of Status counts to include
+var statusCount = -1
+
+//The actions witch should be performed
+var action = "View"
+
+//Veriable storing the active global token
+var token = ""
+
+//Should we do Fields lookup
+var doFieldsLookup bool = true
+
+//Should we only Name for lookup values
+var onlyLookupName bool = true
+
+//Should we use drafts
+var useDrafts bool = true
 
 //Read os flags: -u <baseUrl> , -k <apiKey>, -ip <bindAddress> ....
 //Or use Environment flags PORTFOLEON_APIKEY, PORTFOLEON_BASEURL, PORTFOLEON_BINDADDRESS
@@ -22,7 +67,7 @@ func Init() {
 	// Read OS variables
 	var s = os.Getenv("PORTFOLEON_APIKEY")
 	if s != "" {
-		api.ApiKey = s
+		apiKey = s
 	}
 	s = os.Getenv("PORTFOLEON_BASEURL")
 	if s != "" {
@@ -30,33 +75,155 @@ func Init() {
 	}
 	s = os.Getenv("PORTFOLEON_BINDADDRESS")
 	if s != "" {
-		BindAddress = s
+		bindAddress = s
 	}
-	api.Organization = os.Getenv("PORTFOLEON_ORGANIZATION")
-	api.Workspace = os.Getenv("PORTFOLEON_WORKSPACE")
-	api.ViewName = os.Getenv("PORTFOLEON_VIEWNAME")
+	organization = os.Getenv("PORTFOLEON_ORGANIZATION")
+	workspace = os.Getenv("PORTFOLEON_WORKSPACE")
+	viewName = os.Getenv("PORTFOLEON_VIEWNAME")
 	s = os.Getenv("PORTFOLEON_STATUSCOUNT")
 	if s != "" {
-		api.StatusCount, _ = strconv.Atoi(s)
+		statusCount, _ = strconv.Atoi(s)
 	}
 
 	// flags declaration using flag package
 	flag.StringVar(&api.BaseUrl, "u", api.BaseUrl, "Specify baseuUrl towards protfoleon")
-	flag.StringVar(&api.ApiKey, "k", api.ApiKey, "Specify apiKey.")
-	flag.StringVar(&BindAddress, "b", BindAddress, "Specify bindAdress.")
+	flag.StringVar(&apiKey, "k", apiKey, "Specify apiKey.")
+	flag.StringVar(&bindAddress, "b", bindAddress, "Specify bindAdress.")
 	flag.StringVar(&fileName, "f", fileName, "Write output to file.")
 	flag.BoolVar(&webServer, "serve", webServer, "Use if we should run a webserver.")
 
-	flag.StringVar(&api.Organization, "o", api.Organization, "Name of Portfoleon organization to use.")
-	flag.StringVar(&api.Workspace, "w", api.Workspace, "Name of Portfoleon workspace to use.")
-	flag.StringVar(&api.ViewName, "v", api.ViewName, "Name of Portfoleon view to dump.")
-	flag.IntVar(&api.StatusCount, "c", api.StatusCount, "The number of statuses to include in dump.")
-	flag.StringVar(&api.Action, "a", api.Action, "The action(s) that should be performed.")
-	flag.BoolVar(&api.DoFieldsLookup, "l", api.DoFieldsLookup, "Should we do field lookups.")
-	flag.BoolVar(&api.UseDrafts, "d", api.UseDrafts, "Should we use drafts.")
-	flag.BoolVar(&api.OnlyLookupName, "compact", api.OnlyLookupName, "Should we only use the values of the lookup fields only.")
+	flag.StringVar(&organization, "o", organization, "Name of Portfoleon organization to use.")
+	flag.StringVar(&workspace, "w", workspace, "Name of Portfoleon workspace to use.")
+	flag.StringVar(&viewName, "v", viewName, "Name of Portfoleon view to dump.")
+	flag.IntVar(&statusCount, "c", statusCount, "The number of statuses to include in dump.")
+	flag.StringVar(&action, "a", action, "The action(s) that should be performed.")
+	flag.BoolVar(&doFieldsLookup, "l", doFieldsLookup, "Should we do field lookups.")
+	flag.BoolVar(&useDrafts, "d", useDrafts, "Should we use drafts.")
+	flag.BoolVar(&onlyLookupName, "compact", onlyLookupName, "Should we only use the values of the lookup fields only.")
+	flag.StringVar(&templateName, "t", templateName, "The name of template to use.")
+	flag.StringVar(&jsonFile, "tJson", jsonFile, "The name of jsonfile to test the template with.")
 
 	flag.Parse() // after declaring flags we need to call it
+}
+
+func toTemplate(tplName string, data *string) (string, error) {
+	template, err := template.ParseFiles(tplName)
+	if err != nil {
+		return "", err
+	}
+	tplData := "{\"data\" :" + *data + "}"
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(tplData), &m); err != nil {
+		return "", err
+	}
+
+	var tpl bytes.Buffer
+	if err := template.Execute(&tpl, m); err != nil {
+		return "", err
+	}
+	return tpl.String(), nil
+}
+
+func webHandlerResponse(response *string, w http.ResponseWriter, r *http.Request, _action string) error {
+	var _apiKey = ""
+	var _token = token
+	var err error
+	//Get a valid token for portfoleon on every request
+	reqToken := r.Header.Get("Authorization")
+	if reqToken != "" {
+		splitToken := strings.Split(reqToken, "Bearer ")
+		_apiKey = splitToken[1]
+		_token = ""
+	}
+	if _apiKey == "" {
+		_apiKey = apiKey
+	}
+	//Run refresh of token
+	if _token != "" && api.RefreshToken(&_token) != nil {
+		_token = ""
+	}
+	//If we don't have a token the create a new one
+	if _token == "" {
+		//Create an new token
+		_token, err = api.GetToken(_apiKey)
+		if err != nil {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprintf(w, `{"error", "%s"}`, err)
+			return err
+		}
+		//Store token global if
+		if reqToken == "" {
+			token = _token
+		}
+	}
+	if _action == "" {
+		if r.URL.Path[1:] != "" {
+			_action = strings.ReplaceAll(r.URL.Path[1:], "/", ",")
+		} else {
+			_action = action
+		}
+	}
+	_organization := r.URL.Query().Get("organization")
+	if _organization == "" {
+		_organization = organization
+	}
+	_workspace := r.URL.Query().Get("workspace")
+	if _workspace == "" {
+		_workspace = workspace
+	}
+	_viewName := r.URL.Query().Get("name")
+	if _viewName == "" {
+		_viewName = viewName
+	}
+	var _statusCount = statusCount
+	s := r.URL.Query().Get("count")
+	if s != "" {
+		_statusCount, _ = strconv.Atoi(s)
+	}
+	var _doFieldsLookup = doFieldsLookup
+	s = r.URL.Query().Get("lookup")
+	if s != "" {
+		_doFieldsLookup, _ = strconv.ParseBool(s)
+	}
+	var _onlyLookupName = onlyLookupName
+	s = r.URL.Query().Get("compact")
+	if s != "" {
+		_onlyLookupName, _ = strconv.ParseBool(s)
+	}
+	var _drafts = useDrafts
+	s = r.URL.Query().Get("drafts")
+	if s != "" {
+		_drafts, _ = strconv.ParseBool(s)
+	}
+	err = api.GetAction(response, _token, _action, _organization, _workspace,
+		_viewName, _statusCount, _doFieldsLookup, _onlyLookupName, _drafts)
+	return err
+}
+
+//The handler for web requests
+func webHandler(w http.ResponseWriter, r *http.Request) {
+	var _tplName = filepath.Base(r.URL.Query().Get("template"))
+	if _tplName == "" {
+		_tplName = templateName
+	}
+	var response = ""
+	err := webHandlerResponse(&response, w, r, r.URL.Query().Get("action"))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, `{"error", "%s"}`, err)
+	} else {
+		if _tplName != "" {
+			response, err = toTemplate(_tplName, &response)
+			if err != nil {
+				log.Fatal("Template processing Error", err)
+			}
+		} else {
+			//When we don't use a template output is json
+			w.Header().Set("Content-Type", "application/json")
+		}
+		//Write out the  data
+		fmt.Fprint(w, response)
+	}
 }
 
 func main() {
@@ -64,20 +231,36 @@ func main() {
 	if webServer {
 		//WebServer mode
 		//Simple webserver to reponse on request with the requested workspace items
-		http.HandleFunc("/", api.WebHandler)
-		log.Println("Starting API servering on", BindAddress)
-		log.Fatal(http.ListenAndServe(BindAddress, nil))
+		http.HandleFunc("/", webHandler)
+		log.Println("Starting API servering on", bindAddress)
+		log.Fatal(http.ListenAndServe(bindAddress, nil))
 	} else {
 		//Output to console or file
-		token, err := api.GetToken(api.ApiKey)
+		token, err := api.GetToken(apiKey)
 		if err != nil || token == "" {
 			log.Fatal("Login failed", err)
 		}
 		var response string = ""
-		err = api.GetAction(&response, token, api.Action, api.Organization, api.Workspace, api.ViewName,
-			api.StatusCount, api.DoFieldsLookup, api.OnlyLookupName)
-		if err != nil {
-			log.Fatal(err)
+		if jsonFile != "" {
+			b, err := ioutil.ReadFile(jsonFile) // just pass the file name
+			if err != nil {
+				log.Fatal(err)
+			}
+			response = string(b) // convert content to a 'string'
+		} else {
+			err = api.GetAction(&response, token, action, organization, workspace, viewName,
+				statusCount, doFieldsLookup, onlyLookupName, useDrafts)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		//Should we run the response trough a template
+		if templateName != "" {
+			response, err = toTemplate(templateName, &response)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		if fileName != "" {
