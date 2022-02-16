@@ -1,5 +1,7 @@
 # Portfoleon
-This is a smal tool to extract view data from https://portfoleon.com in json format so it can be used in other tools
+This is a smal tool to extract view data from https://portfoleon.com in json format so it can be used in other tools. 
+You can download the latest stable version for you platform from the dist directroy and used gzip -d `protfoleon-...` to
+get you nativefile
 
 ## Steps performed by this tool
 * Login using the APIKEY and convert it into Bearer token
@@ -57,3 +59,7 @@ When running a webserver using the -serve option, you should set your APIKEY in 
 * count=The number of status reports to include
 * compact=Return lookup values only
 * lookup=Lookup the all fields
+
+## Building
+We have added a build script `build.sh` which will create mac, linux and windows executable within the `dist` directory.
+
