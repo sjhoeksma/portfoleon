@@ -33,6 +33,10 @@ portfoleon
     	Name of Portfoleon organization to use.
   -serve
     	Use if we should run a webserver.
+  -t string
+    	The name of template to use.
+  -tJson string
+    	The name of jsonfile to test the template with.
   -u string
     	Specify baseuUrl towards protfoleon (default "https://portfoleon.herokuapp.com/api/v1")
   -v string
@@ -63,3 +67,9 @@ When running a webserver using the -serve option, you should set your APIKEY in 
 ## Building
 We have added a build script `build.sh` which will create mac, linux and windows executable within the `dist` directory.
 
+## Template engine
+It is possible to run the result of the view directly through a GO html/template using the '-t'. An example of a template can be found in `example.tpl`
+We have extended te template engine with the following functions
+* now=current date
+* slice=array creator
+* strip=remove all html for string
