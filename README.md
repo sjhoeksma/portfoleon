@@ -24,6 +24,8 @@ portfoleon
   -compact
     	Should we only use the values of the lookup fields only. (default true)
   -d	Should we use drafts. (default true)
+  -days int
+    	The number of days use to graylist a status update . (default 45)
   -f string
     	Write output to file.
   -k string
@@ -33,6 +35,8 @@ portfoleon
     	Name of Portfoleon organization to use.
   -serve
     	Use if we should run a webserver.
+  -status string
+    	The status used for graylisting (requires writeable token).
   -t string
     	The name of template to use.
   -tJson string
@@ -43,6 +47,16 @@ portfoleon
     	Name of Portfoleon view to dump.
   -w string
     	Name of Portfoleon workspace to use.
+```
+
+Example
+```
+# Extract all data from Projects using the first organization and workspace and dump it in the file output 
+protofoleon -k "PORTFOLEON_KEY" -v "Projects" -c 2 -f "output" 
+# Do same data extraction, but now run out put first through the template before wirting it to output
+protofoleon -k "PORTFOLEON_KEY" -v "Projects" -c 2 -f "output" -t "template.tpl" 
+# Changes all workitem status to Gray within Projects if there was no status report for the last 45 days
+protofoleon -k "PORTFOLEON_WRITE_KEY" -v "Projects" -days 45 -status "Gray"
 ```
 
 ## Environment Variables

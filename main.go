@@ -64,6 +64,12 @@ var onlyLookupName bool = true
 //Should we use drafts
 var useDrafts bool = true
 
+//The number of gray list days
+var grayDays int = 45
+
+//The gray list status
+var grayStatus string = ""
+
 //Read os flags: -u <baseUrl> , -k <apiKey>, -ip <bindAddress> ....
 //Or use Environment flags PORTFOLEON_APIKEY, PORTFOLEON_BASEURL, PORTFOLEON_BINDADDRESS
 func Init() {
@@ -105,10 +111,13 @@ func Init() {
 	flag.BoolVar(&onlyLookupName, "compact", onlyLookupName, "Should we only use the values of the lookup fields only.")
 	flag.StringVar(&templateName, "t", templateName, "The name of template to use.")
 	flag.StringVar(&jsonFile, "tJson", jsonFile, "The name of jsonfile to test the template with.")
+	flag.IntVar(&grayDays, "days", grayDays, "The number of days use to graylist a status update .")
+	flag.StringVar(&grayStatus, "status", grayStatus, "The status used for graylisting (requires writeable token).")
 
 	flag.Parse() // after declaring flags we need to call it
 }
 
+//Apply the data to the template
 func toTemplate(tplName string, data *string) (string, error) {
 	t, err := template.New(filepath.Base(tplName)).Funcs(template.FuncMap{
 		"now": time.Now,
@@ -138,6 +147,7 @@ func toTemplate(tplName string, data *string) (string, error) {
 	return tpl.String(), nil
 }
 
+//The webhandler
 func webHandlerResponse(response *string, w http.ResponseWriter, r *http.Request, _action string) error {
 	var _apiKey = ""
 	var _token = token
@@ -255,7 +265,14 @@ func main() {
 			log.Fatal("Login failed", err)
 		}
 		var response string = ""
-		if jsonFile != "" {
+		if grayDays != 0 && grayStatus != "" {
+			r, err := api.DoGrayListing(token, action, organization, workspace, viewName, grayStatus, grayDays)
+			if err != nil {
+				log.Fatal(err)
+			}
+			j, _ := json.Marshal(r)
+			response = string(j)
+		} else if jsonFile != "" {
 			b, err := ioutil.ReadFile(jsonFile) // just pass the file name
 			if err != nil {
 				log.Fatal(err)

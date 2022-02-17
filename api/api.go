@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //The Token Interface structure for a token request of portfoleon
@@ -690,6 +691,107 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 	return string(ret), err
 }
 
+//Apply all changes
+func DoApply(token string, organization int, workspace int, comment string, workitemid int) error {
+	//Apply the drafts
+	jsonData := []byte("{\"comment\": \"" + comment + "\"}")
+	var request *http.Request
+	var err error
+	if workitemid != 0 {
+		request, err = http.NewRequest(http.MethodPost, BaseUrl+"/drafts/"+strconv.Itoa(workitemid)+"/apply", bytes.NewBuffer(jsonData))
+	} else {
+		request, err = http.NewRequest(http.MethodPost, BaseUrl+"/workspaces/"+strconv.Itoa(workspace)+"/my_draft/apply", bytes.NewBuffer(jsonData))
+	}
+	request.Header.Add("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		return err
+	}
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	return nil
+}
+
+func DoGrayListing(token string, action string, organization string, workspace string, viewName string, grayStatus string, grayDays int) ([]WorkItemInterface, error) {
+	var ret []WorkItemInterface
+	if token == "" {
+		return ret, errors.New("token is not valid for action")
+	}
+	orgId, err := GetOrganization(token, organization)
+	if err != nil {
+		return ret, err
+	}
+	spaceId, err := GetWorkspace(token, orgId, workspace)
+	if err != nil {
+		return ret, err
+	}
+
+	if err != nil {
+		return ret, err
+	}
+
+	jsonData, err := GetWorkItems(token, orgId, spaceId, viewName, 0, false, false, true)
+	if err != nil {
+		return ret, err
+	}
+
+	var m []WorkItemInterface
+	if err := json.Unmarshal([]byte(jsonData), &m); err != nil {
+		return ret, err
+	}
+
+	//Create the lookupStatus table and lookup the status
+	lookupStatus, err := GetStatusLookUp(token, orgId, spaceId)
+	if err != nil {
+		return ret, err
+	}
+	var _grayStatus StatusInterface
+	for _, s := range lookupStatus {
+		if s.Name == grayStatus {
+			_grayStatus = s
+			break
+		}
+	}
+	if _grayStatus.ID == 0 {
+		return ret, errors.New("Gray status not found " + grayStatus)
+	}
+
+	//Loop the data and update the fields in needed
+	layout := "2006-01-02"
+	grayDate := time.Now().Local().Add(-time.Hour * time.Duration(24*grayDays))
+	for _, v := range m {
+		if v.StatusID != _grayStatus.ID {
+			t, err := time.Parse(layout, v.DtReport)
+			if err == nil && t.Before(grayDate) {
+				//Update the status
+				v.StatusID = _grayStatus.ID
+				jsonData := []byte("{\"name\" : \"" + v.Name + "\",\"status_id\": " + strconv.Itoa(_grayStatus.ID) + "}")
+				//jsonData, _ := json.Marshal(v)
+				request, err := http.NewRequest(http.MethodPatch, BaseUrl+"/work_items/"+strconv.Itoa(v.ID), bytes.NewBuffer(jsonData))
+				request.Header.Set("Content-Type", "application/json")
+				request.Header.Add("Authorization", "Bearer "+token)
+				if err != nil {
+					return ret, err
+				}
+				client := &http.Client{}
+				response, err := client.Do(request)
+				if err != nil {
+					return ret, err
+				}
+				defer response.Body.Close()
+				//Add the record to response
+				ret = append(ret, v)
+			}
+		}
+	}
+	return ret, nil
+}
+
+//Get data based on a action
 func GetAction(response *string, token string, action string, organization string, workspace string,
 	viewName string, statusCount int, doFieldsLookup bool, onlyLookupName bool, useDrafts bool) error {
 	action = strings.ToUpper(action)
