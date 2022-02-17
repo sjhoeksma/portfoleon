@@ -14,6 +14,9 @@ import (
 	"portfoleon/api"
 	"strconv"
 	"strings"
+	"time"
+
+	strip "github.com/grokify/html-strip-tags-go"
 )
 
 //The filename use as output
@@ -107,7 +110,18 @@ func Init() {
 }
 
 func toTemplate(tplName string, data *string) (string, error) {
-	template, err := template.ParseFiles(tplName)
+	t, err := template.New(filepath.Base(tplName)).Funcs(template.FuncMap{
+		"now": time.Now,
+		"inc": func(n int) int {
+			return n + 1
+		},
+		"strip": func(html string) string {
+			return strip.StripTags(html)
+		},
+		"slice": func(args ...interface{}) []interface{} {
+			return args
+		},
+	}).ParseFiles(tplName)
 	if err != nil {
 		return "", err
 	}
@@ -118,7 +132,7 @@ func toTemplate(tplName string, data *string) (string, error) {
 	}
 
 	var tpl bytes.Buffer
-	if err := template.Execute(&tpl, m); err != nil {
+	if err := t.Execute(&tpl, m); err != nil {
 		return "", err
 	}
 	return tpl.String(), nil

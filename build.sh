@@ -1,6 +1,6 @@
 #!bash
 
-package=${1:-protfoleon}
+package=${1:-portfoleon}
 platforms=("windows/amd64" "darwin/amd64" "linux/amd64" "darwin/arm64")
 output_dir="dist"
 rm -rf $output_dir

@@ -600,9 +600,15 @@ func GetWorkItems(token string, organization int, workspace int, viewName string
 				return "", err
 			}
 			if !onlyLookupName || statusCount != 1 {
-				responseObject.Data[i].StatusReports = statusReports
+				//Trim down the reports
+				l := len(statusReports)
+				if l > statusCount {
+					l = statusCount
+				}
+				responseObject.Data[i].StatusReports = statusReports[:l]
 			}
 			if len(statusReports) > 0 {
+				//Add the last report
 				responseObject.Data[i].StatusReport = statusReports[0].Report
 			}
 		}
