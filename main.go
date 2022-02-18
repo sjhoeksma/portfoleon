@@ -19,6 +19,8 @@ import (
 	strip "github.com/grokify/html-strip-tags-go"
 )
 
+var Version = "1.0.1"
+
 //The filename use as output
 var fileName = ""
 
@@ -95,6 +97,7 @@ func Init() {
 	}
 
 	// flags declaration using flag package
+	version := flag.Bool("version", false, "prints current version ("+Version+")")
 	flag.StringVar(&api.BaseUrl, "u", api.BaseUrl, "Specify baseuUrl towards protfoleon")
 	flag.StringVar(&apiKey, "k", apiKey, "Specify apiKey.")
 	flag.StringVar(&bindAddress, "b", bindAddress, "Specify bindAdress.")
@@ -113,8 +116,11 @@ func Init() {
 	flag.StringVar(&jsonFile, "tJson", jsonFile, "The name of jsonfile to test the template with.")
 	flag.IntVar(&grayDays, "days", grayDays, "The number of days use to graylist a status update .")
 	flag.StringVar(&grayStatus, "status", grayStatus, "The status used for graylisting (requires writeable token).")
-
 	flag.Parse() // after declaring flags we need to call it
+	if *version {
+		fmt.Println("Version ", Version)
+		os.Exit(0)
+	}
 }
 
 //Apply the data to the template

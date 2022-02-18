@@ -713,6 +713,9 @@ func DoApply(token string, organization int, workspace int, comment string, work
 		return err
 	}
 	defer response.Body.Close()
+	if !(response.StatusCode >= 200 && response.StatusCode <= 299) {
+		return errors.New("HTTP Status is in the 2xx range")
+	}
 	return nil
 }
 
@@ -734,7 +737,7 @@ func DoGrayListing(token string, action string, organization string, workspace s
 		return ret, err
 	}
 
-	jsonData, err := GetWorkItems(token, orgId, spaceId, viewName, 0, false, false, true)
+	jsonData, err := GetWorkItems(token, orgId, spaceId, viewName, 1, false, false, true)
 	if err != nil {
 		return ret, err
 	}
@@ -769,9 +772,9 @@ func DoGrayListing(token string, action string, organization string, workspace s
 			if err == nil && t.Before(grayDate) {
 				//Update the status
 				v.StatusID = _grayStatus.ID
-				jsonData := []byte("{\"name\" : \"" + v.Name + "\",\"status_id\": " + strconv.Itoa(_grayStatus.ID) + "}")
+				jsonData := []byte("{\"report\" : \"" + v.StatusReport + "\",\"status_id\": " + strconv.Itoa(_grayStatus.ID) + "}")
 				//jsonData, _ := json.Marshal(v)
-				request, err := http.NewRequest(http.MethodPatch, BaseUrl+"/work_items/"+strconv.Itoa(v.ID), bytes.NewBuffer(jsonData))
+				request, err := http.NewRequest(http.MethodPost, BaseUrl+"/work_items/"+strconv.Itoa(v.ID)+"/status_reports", bytes.NewBuffer(jsonData))
 				request.Header.Set("Content-Type", "application/json")
 				request.Header.Add("Authorization", "Bearer "+token)
 				if err != nil {
@@ -783,6 +786,9 @@ func DoGrayListing(token string, action string, organization string, workspace s
 					return ret, err
 				}
 				defer response.Body.Close()
+				if !(response.StatusCode >= 200 && response.StatusCode <= 299) {
+					return ret, errors.New("HTTP Status is in the 2xx range")
+				}
 				//Add the record to response
 				ret = append(ret, v)
 			}
