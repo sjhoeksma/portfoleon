@@ -131,7 +131,9 @@ func toTemplate(tplName string, data *string) (string, error) {
 			return n + 1
 		},
 		"strip": func(html string) string {
-			return strip.StripTags(html)
+			data := strip.StripTags(html)
+			data = strings.ReplaceAll(data, "&nbsp;", "")
+			return data
 		},
 		"slice": func(args ...interface{}) []interface{} {
 			return args
@@ -150,7 +152,8 @@ func toTemplate(tplName string, data *string) (string, error) {
 	if err := t.Execute(&tpl, m); err != nil {
 		return "", err
 	}
-	return tpl.String(), nil
+	tplData = tpl.String()
+	return tplData, nil
 }
 
 //The webhandler

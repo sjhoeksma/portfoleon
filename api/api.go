@@ -772,7 +772,7 @@ func DoGrayListing(token string, action string, organization string, workspace s
 			if err == nil && t.Before(grayDate) {
 				//Update the status
 				v.StatusID = _grayStatus.ID
-				jsonData := []byte("{\"report\" : \"" + v.StatusReport + "\",\"status_id\": " + strconv.Itoa(_grayStatus.ID) + "}")
+				jsonData := []byte("{\"report\" : \"No Report for more than " + strconv.Itoa(grayDays) + " days\",\"status_id\": " + strconv.Itoa(_grayStatus.ID) + "}")
 				//jsonData, _ := json.Marshal(v)
 				request, err := http.NewRequest(http.MethodPost, BaseUrl+"/work_items/"+strconv.Itoa(v.ID)+"/status_reports", bytes.NewBuffer(jsonData))
 				request.Header.Set("Content-Type", "application/json")
